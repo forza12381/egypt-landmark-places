@@ -58,7 +58,7 @@ const MainLayout: React.FC<{
   // Hash-based routing for Admin access
   useEffect(() => {
     const handleHashChange = () => {
-      if (window.location.pathname === '/admin') {
+      if (window.location.hash === '#admin') {
         setView('admin');
       } else {
         setView('explorer');
