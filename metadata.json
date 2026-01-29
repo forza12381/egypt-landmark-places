@@ -1,0 +1,7 @@
+{
+  "name": "Egypt Historical Landmarks Explorer",
+  "description": "A bilingual (Arabic/English) PWA for exploring historical landmarks in Northern Upper Egypt, featuring an interactive map with Egyptian-themed design.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
