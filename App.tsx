@@ -8,6 +8,8 @@ import AdminPanel from './components/AdminPanel';
 import { Landmark, Governorate, LandmarkType, TranslationMap, Category } from './types';
 import { INITIAL_LANDMARKS, INITIAL_GOVERNORATES, INITIAL_TYPES, INITIAL_TRANSLATIONS } from './constants';
 import { Languages, Compass, Search, SlidersHorizontal, Database } from 'lucide-react';
+import LoadingScreen from './components/LoadingScreen';
+import { db } from './services/database';
 
 const STORAGE_KEYS = {
   LANDMARKS: 'egypt-landmarks-db-v1',
@@ -221,36 +223,112 @@ const MainLayout: React.FC<{
 
 // Root Component
 const App: React.FC = () => {
-  // Initialize state synchronously
-  const [landmarks, setLandmarks] = useState<Landmark[]>(() => loadData(STORAGE_KEYS.LANDMARKS, INITIAL_LANDMARKS));
-  const [governorates, setGovernorates] = useState<Category[]>(() => loadData(STORAGE_KEYS.GOVERNORATES, INITIAL_GOVERNORATES));
-  const [types, setTypes] = useState<Category[]>(() => loadData(STORAGE_KEYS.TYPES, INITIAL_TYPES));
-  const [translations, setTranslations] = useState<TranslationMap>(() => loadData(STORAGE_KEYS.TRANSLATIONS, INITIAL_TRANSLATIONS));
+  // Local state with immediate fallback to localStorage / constants
+  const [landmarks, setLandmarks] = useState<Landmark[]>(() =>
+    loadData(STORAGE_KEYS.LANDMARKS, INITIAL_LANDMARKS)
+  );
+  const [governorates, setGovernorates] = useState<Category[]>(() =>
+    loadData(STORAGE_KEYS.GOVERNORATES, INITIAL_GOVERNORATES)
+  );
+  const [types, setTypes] = useState<Category[]>(() =>
+    loadData(STORAGE_KEYS.TYPES, INITIAL_TYPES)
+  );
+  const [translations, setTranslations] = useState<TranslationMap>(() =>
+    loadData(STORAGE_KEYS.TRANSLATIONS, INITIAL_TRANSLATIONS)
+  );
+  const [isLoadingRemote, setIsLoadingRemote] = useState(true);
+
+  // Initial sync from Supabase backend (with graceful fallback)
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRemote = async () => {
+      try {
+        const [remoteLandmarks, remoteGovernorates, remoteTypes, remoteTranslations] =
+          await Promise.all([
+            db.getLandmarks(),
+            db.getGovernorates(),
+            db.getTypes(),
+            db.getTranslations(),
+          ]);
+
+        if (cancelled) return;
+
+        setLandmarks(remoteLandmarks);
+        setGovernorates(remoteGovernorates);
+        setTypes(remoteTypes);
+        setTranslations(remoteTranslations);
+
+        // keep local cache up to date
+        localStorage.setItem(STORAGE_KEYS.LANDMARKS, JSON.stringify(remoteLandmarks));
+        localStorage.setItem(
+          STORAGE_KEYS.GOVERNORATES,
+          JSON.stringify(remoteGovernorates)
+        );
+        localStorage.setItem(STORAGE_KEYS.TYPES, JSON.stringify(remoteTypes));
+        localStorage.setItem(
+          STORAGE_KEYS.TRANSLATIONS,
+          JSON.stringify(remoteTranslations)
+        );
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[Supabase] Failed to load remote data, using local cache.', e);
+      } finally {
+        if (!cancelled) {
+          setIsLoadingRemote(false);
+        }
+      }
+    };
+
+    loadRemote();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Sync Handlers (Direct LocalStorage update)
   const handleUpdateLandmarks = (newData: Landmark[]) => {
     setLandmarks(newData);
     localStorage.setItem(STORAGE_KEYS.LANDMARKS, JSON.stringify(newData));
+    // fire-and-forget remote persistence
+    db.saveLandmarks(newData).catch((e) =>
+      // eslint-disable-next-line no-console
+      console.error('[Supabase] saveLandmarks failed', e)
+    );
   };
 
   const handleUpdateGovernorates = (newData: Category[]) => {
     setGovernorates(newData);
     localStorage.setItem(STORAGE_KEYS.GOVERNORATES, JSON.stringify(newData));
+    db.saveGovernorates(newData).catch((e) =>
+      // eslint-disable-next-line no-console
+      console.error('[Supabase] saveGovernorates failed', e)
+    );
   };
 
   const handleUpdateTypes = (newData: Category[]) => {
     setTypes(newData);
     localStorage.setItem(STORAGE_KEYS.TYPES, JSON.stringify(newData));
+    db.saveTypes(newData).catch((e) =>
+      // eslint-disable-next-line no-console
+      console.error('[Supabase] saveTypes failed', e)
+    );
   };
 
   const handleUpdateTranslations = (newData: TranslationMap) => {
     setTranslations(newData);
     localStorage.setItem(STORAGE_KEYS.TRANSLATIONS, JSON.stringify(newData));
+    db.saveTranslations(newData).catch((e) =>
+      // eslint-disable-next-line no-console
+      console.error('[Supabase] saveTranslations failed', e)
+    );
   };
 
   return (
     <LanguageProvider translations={translations}>
-      <MainLayout 
+      {isLoadingRemote && <LoadingScreen />}
+      <MainLayout
         data={{ landmarks, governorates, types }}
         onUpdateLandmarks={handleUpdateLandmarks}
         onUpdateGovernorates={handleUpdateGovernorates}
