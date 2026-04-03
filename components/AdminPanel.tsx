@@ -160,10 +160,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const { isRTL, language, t, toggleLanguage } = useLanguage();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const pullStartYRef = useRef<number | null>(null);
-  const didPullToRefreshRef = useRef(false);
-  const isPullTrackingRef = useRef(false);
   
   // Landmark Editor State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -194,58 +190,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     };
   }, []); // Run only on mount/unmount of AdminPanel
 
-  // Mobile pull-to-refresh fallback (native gesture may not work with nested scroll containers).
-  useEffect(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-
-    const isMobile = window.matchMedia('(max-width: 640px)').matches;
-    if (!isMobile) return;
-
-    const thresholdPx = 70;
-
-    const onTouchStart = (e: TouchEvent) => {
-      // Only start if we're already at the top of the scroll container.
-      if (el.scrollTop !== 0) return;
-      if (e.touches.length !== 1) return;
-
-      isPullTrackingRef.current = true;
-      didPullToRefreshRef.current = false;
-      pullStartYRef.current = e.touches[0].clientY;
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (!isPullTrackingRef.current) return;
-      if (pullStartYRef.current == null) return;
-      if (e.touches.length !== 1) return;
-
-      const deltaY = e.touches[0].clientY - pullStartYRef.current;
-      if (deltaY > thresholdPx) didPullToRefreshRef.current = true;
-    };
-
-    const onTouchEnd = () => {
-      if (!isPullTrackingRef.current) return;
-      isPullTrackingRef.current = false;
-
-      const shouldRefresh = didPullToRefreshRef.current;
-      pullStartYRef.current = null;
-      didPullToRefreshRef.current = false;
-
-      if (shouldRefresh) window.location.reload();
-    };
-
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: true });
-    el.addEventListener('touchend', onTouchEnd);
-    el.addEventListener('touchcancel', onTouchEnd);
-
-    return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('touchend', onTouchEnd);
-      el.removeEventListener('touchcancel', onTouchEnd);
-    };
-  }, []);
+  // Note: we intentionally do NOT implement a custom pull-to-refresh here.
+  // Mobile browsers can handle refresh via their own UI; the admin content only scrolls.
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1007,7 +953,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         </header>
 
         <div
-          ref={scrollContainerRef}
           className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#f8f9fa]"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
