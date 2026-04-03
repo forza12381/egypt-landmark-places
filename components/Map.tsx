@@ -1,9 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect,useRef } from 'react';
 import { MapContainer, TileLayer, Marker, useMap, Tooltip, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import { RotateCcw,Tag } from 'lucide-react';
 import { Landmark, Category } from '../types';
 import { useLanguage } from './LanguageContext';
+
+
 
 interface MapProps {
   landmarks: Landmark[];
@@ -64,6 +66,7 @@ const MapController: React.FC<{ target: [number, number] | null }> = ({ target }
   return null;
 };
 
+
 const ResetViewControl = () => {
   const map = useMap();
   const { isRTL } = useLanguage();
@@ -73,6 +76,8 @@ const ResetViewControl = () => {
     e.preventDefault();
     map.flyTo([26.82, 30.80], 7, { duration: 1.5 });
   };
+
+  
 
   return (
     <div className={`absolute bottom-28 ${isRTL ? 'left-[10px]' : 'right-[10px]'} z-[400]`}>
@@ -115,17 +120,46 @@ const EgyptMap: React.FC<MapProps> = ({ landmarks, onLandmarkSelect, selectedLan
         {landmarks.map((landmark) => {
           const currentType = types.find(t => t.id === landmark.type);
           const typeEmoji = currentType?.emoji || '📍';
+            const timerRef = useRef(null);
+
+  const startHold = (e) => {
+    const marker = e.target;
+    // Desktop & Mobile: Open after 400ms of holding
+    timerRef.current = setTimeout(() => {
+      marker.openTooltip();
+    }, 400); 
+  };
+
+  const stopHold = (e) => {
+    // Clear timer if they release before 400ms
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    // Hide tooltip immediately on release
+    e.target.closeTooltip();
+  };
           return (
           <Marker
             key={landmark.id}
             position={landmark.coords}
             icon={createCustomIcon(typeEmoji)}
             eventHandlers={{
-              click: () => onLandmarkSelect(landmark),
-              contextmenu: (e) => {
-                e.originalEvent?.preventDefault();
-                e.target.toggleTooltip();
-              }
+              click: (e) =>{ onLandmarkSelect(landmark); stopHold(e)},
+               // Desktop support
+        mousedown: startHold,
+        mouseup: stopHold,
+        mouseout: stopHold, // Hide if mouse leaves marker while holding
+        
+        // Mobile support (Direct DOM events often needed for touch)
+        add: (e) => {
+          const marker = e.target;
+          const element = marker.getElement();
+          if (element) {
+            element.addEventListener('touchstart', () => startHold({ target: marker }), { passive: true });
+            element.addEventListener('touchend', () => stopHold({ target: marker }), { passive: true });
+            element.addEventListener('touchcancel', () => stopHold({ target: marker }), { passive: true });
+          }
+        }
             }}
           >
             <Tooltip 
