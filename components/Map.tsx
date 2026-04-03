@@ -146,9 +146,9 @@ const EgyptMap: React.FC<MapProps> = ({ landmarks, onLandmarkSelect, selectedLan
             eventHandlers={{
               click: (e) =>{ onLandmarkSelect(landmark); stopHold(e)},
                // Desktop support
-        mousedown: startHold,
-        mouseup: stopHold,
-        mouseout: stopHold, // Hide if mouse leaves marker while holding
+              mousedown: startHold,
+              mouseup: stopHold,
+              mouseout: stopHold, // Hide if mouse leaves marker while holding
         
         // Mobile support (Direct DOM events often needed for touch)
         add: (e) => {
