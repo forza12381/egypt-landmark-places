@@ -11,18 +11,23 @@ import {
 /**
  * Expected Supabase schema (you can adjust names if needed):
  *
- * Table: categories
- * - id          text PRIMARY KEY
+ * Table: governorates
+ * - id          uuid PRIMARY KEY DEFAULT gen_random_uuid()
  * - name_en     text NOT NULL
  * - name_ar     text NOT NULL
- * - kind        text NOT NULL  -- 'governorate' | 'type'
+ *
+ * Table: types
+ * - id          uuid PRIMARY KEY DEFAULT gen_random_uuid()
+ * - name_en     text NOT NULL
+ * - name_ar     text NOT NULL
+ * - emoji       text
  *
  * Table: landmarks
- * - id              text PRIMARY KEY
+ * - id              uuid PRIMARY KEY DEFAULT gen_random_uuid()
  * - name_en         text NOT NULL
  * - name_ar         text NOT NULL
- * - type_id         text REFERENCES categories(id)
- * - governorate_id  text REFERENCES categories(id)
+ * - type_id         uuid REFERENCES types(id)
+ * - governorate_id  uuid REFERENCES governorates(id)
  * - lat             double precision
  * - lng             double precision
  * - description_en  text
@@ -144,9 +149,8 @@ class DatabaseService {
     }
 
     const { data, error } = await supabase!
-      .from('categories')
-      .select('id,name_en,name_ar')
-      .eq('kind', 'governorate');
+      .from('governorates')
+      .select('id,name_en,name_ar');
 
     if (error) {
       // eslint-disable-next-line no-console
@@ -167,9 +171,8 @@ class DatabaseService {
 
     // Get existing IDs from database for governorates
     const { data: existingData } = await supabase!
-      .from('categories')
-      .select('id')
-      .eq('kind', 'governorate');
+      .from('governorates')
+      .select('id');
 
     const existingIds = new Set((existingData || []).map((r: any) => r.id));
     const newIds = new Set(data.map((c) => c.id));
@@ -180,10 +183,9 @@ class DatabaseService {
     // Delete removed governorates
     if (idsToDelete.length > 0) {
       const { error: deleteError } = await supabase!
-        .from('categories')
+        .from('governorates')
         .delete()
-        .in('id', idsToDelete)
-        .eq('kind', 'governorate');
+        .in('id', idsToDelete);
 
       if (deleteError) {
         // eslint-disable-next-line no-console
@@ -196,11 +198,10 @@ class DatabaseService {
       id: c.id,
       name_en: c.name.en,
       name_ar: c.name.ar,
-      kind: 'governorate',
     }));
 
     const { error } = await supabase!
-      .from('categories')
+      .from('governorates')
       .upsert(payload, { onConflict: 'id' });
 
     if (error) {
@@ -213,10 +214,9 @@ class DatabaseService {
     if (!this.isRemoteEnabled()) return;
 
     const { error } = await supabase!
-      .from('categories')
+      .from('governorates')
       .delete()
-      .eq('id', id)
-      .eq('kind', 'governorate');
+      .eq('id', id);
 
     if (error) {
       // eslint-disable-next-line no-console
@@ -231,9 +231,8 @@ class DatabaseService {
     }
 
     const { data, error } = await supabase!
-      .from('categories')
-      .select('id,name_en,name_ar')
-      .eq('kind', 'type');
+      .from('types')
+      .select('id,name_en,name_ar,emoji');
 
     if (error) {
       // eslint-disable-next-line no-console
@@ -245,6 +244,7 @@ class DatabaseService {
       (row: any): Category => ({
         id: row.id,
         name: { en: row.name_en, ar: row.name_ar },
+        emoji: row.emoji,
       })
     );
   }
@@ -254,9 +254,8 @@ class DatabaseService {
 
     // Get existing IDs from database for types
     const { data: existingData } = await supabase!
-      .from('categories')
-      .select('id')
-      .eq('kind', 'type');
+      .from('types')
+      .select('id');
 
     const existingIds = new Set((existingData || []).map((r: any) => r.id));
     const newIds = new Set(data.map((c) => c.id));
@@ -267,10 +266,9 @@ class DatabaseService {
     // Delete removed types
     if (idsToDelete.length > 0) {
       const { error: deleteError } = await supabase!
-        .from('categories')
+        .from('types')
         .delete()
-        .in('id', idsToDelete)
-        .eq('kind', 'type');
+        .in('id', idsToDelete);
 
       if (deleteError) {
         // eslint-disable-next-line no-console
@@ -283,11 +281,11 @@ class DatabaseService {
       id: c.id,
       name_en: c.name.en,
       name_ar: c.name.ar,
-      kind: 'type',
+      emoji: c.emoji,
     }));
 
     const { error } = await supabase!
-      .from('categories')
+      .from('types')
       .upsert(payload, { onConflict: 'id' });
 
     if (error) {
@@ -300,10 +298,9 @@ class DatabaseService {
     if (!this.isRemoteEnabled()) return;
 
     const { error } = await supabase!
-      .from('categories')
+      .from('types')
       .delete()
-      .eq('id', id)
-      .eq('kind', 'type');
+      .eq('id', id);
 
     if (error) {
       // eslint-disable-next-line no-console

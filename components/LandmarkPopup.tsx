@@ -89,7 +89,8 @@ const LandmarkPopup: React.FC<LandmarkPopupProps> = ({ landmark, onClose, govern
               <div className="flex flex-wrap items-center gap-2 mb-4">
                 <span className="px-3 py-1 bg-[#d4af37]/20 text-[#8b6d1b] rounded-full text-sm font-semibold flex items-center gap-1">
                   <Tag size={14} />
-                  {currentType ? currentType.name[language] : landmark.type}
+                  {currentType ? (currentType.emoji ? `${currentType.emoji} ${currentType.name[language]}`
+                     : currentType.name[language]) : landmark.type}
                 </span>
                 <span className="px-3 py-1 bg-[#e2725b]/20 text-[#a6422d] rounded-full text-sm font-semibold flex items-center gap-1">
                   <MapPin size={14} />

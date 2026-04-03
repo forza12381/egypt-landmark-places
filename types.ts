@@ -1,17 +1,18 @@
 
 export interface Category {
-  id: string;
+  id?: string;
   name: {
     en: string;
     ar: string;
   };
+  emoji?: string;
 }
 
 export type LandmarkType = string; // id of Category
 export type Governorate = string; // id of Category
 
 export interface Landmark {
-  id: string;
+  id?: string;
   name: {
     en: string;
     ar: string;

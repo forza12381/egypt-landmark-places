@@ -84,7 +84,7 @@ const LocationPicker: React.FC<{
   
   // Validation: Ensure coords are valid numbers, fallback to Egypt center if not
   const safeCoords: [number, number] = (Array.isArray(coords) && coords.length === 2 && !isNaN(coords[0]) && !isNaN(coords[1])) 
-    ? coords 
+    ? coords as [number, number]
     : [29.3, 31.0];
 
   const MapEvents = () => {
@@ -166,7 +166,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [landmarkSearch, setLandmarkSearch] = useState('');
 
   // Generic Category Editor State
-  const [editingCategory, setEditingCategory] = useState<{id: string, name: {en: string, ar: string}} | null>(null);
+  const [editingCategory, setEditingCategory] = useState<{id: string, name: {en: string, ar: string}, emoji?: string} | null>(null);
 
   // Close sidebar on tab change (mobile)
   const handleTabChange = (tab: Tab) => {
@@ -217,7 +217,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     if (editingId) {
       onUpdateLandmarks(landmarks.map(l => l.id === editingId ? { ...finalData, id: editingId } : l));
     } else {
-      onUpdateLandmarks([{ ...finalData, id: Date.now().toString() }, ...landmarks]);
+      onUpdateLandmarks([{ ...finalData, id: crypto.randomUUID() }, ...landmarks]);
     }
     setIsEditorOpen(false);
   };
@@ -231,7 +231,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const duplicateLandmark = (l: Landmark) => {
     const copy = {
       ...l,
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       name: { en: `${l.name.en} (Copy)`, ar: `${l.name.ar} (نسخة)` }
     };
     onUpdateLandmarks([copy, ...landmarks]);
@@ -241,17 +241,22 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleSaveCategory = (
     list: Category[], 
     updateList: (l: Category[]) => void, 
-    formData: {id: string, name: {en: string, ar: string}},
-    isNew: boolean
+    formData: {id: string, name: {en: string, ar: string}, emoji?: string},
+    isNew: boolean,
+    type?: 'gov' | 'type'
   ) => {
     if (!formData.name.en || !formData.name.ar) return;
 
+    let finalEmoji = formData.emoji;
+    if (type === 'type' && (!finalEmoji || !finalEmoji.trim())) {
+      finalEmoji = '📍';
+    }
+
     if (isNew) {
-      const id = formData.name.en.toLowerCase().replace(/[^a-z0-9]/g, '-');
-      if (list.some(i => i.id === id)) return alert("ID already exists");
-      updateList([...list, { id, name: formData.name }]);
+      const id = crypto.randomUUID();
+      updateList([...list, { id, name: formData.name, emoji: finalEmoji }]);
     } else {
-      updateList(list.map(i => i.id === formData.id ? { ...i, name: formData.name } : i));
+      updateList(list.map(i => i.id === formData.id ? { ...i, name: formData.name, emoji: finalEmoji } : i));
     }
     setEditingCategory(null);
   };
@@ -314,7 +319,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   <span>{governorates.find(g => g.id === l.governorate)?.name[language]}</span>
                 </div>
               </div>
-              <div className="text-xs font-mono text-slate-400">ID: {l.id.slice(0,6)}...</div>
+              {/* <div className="text-xs font-mono text-slate-400">ID: {l.id.slice(0,6)}...</div> */}
             </div>
           ))}
         </div>
@@ -634,7 +639,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           <p className="text-slate-500 mt-1">{type === 'gov' ? t.manageGovernoratesDesc : t.manageTypesDesc}</p>
         </div>
         <button 
-          onClick={() => setEditingCategory({id: '', name: {en: '', ar: ''}})}
+          onClick={() => setEditingCategory({id: '', name: {en: '', ar: ''}, emoji: ''})}
           className="px-6 py-3 bg-[#d4af37] text-white rounded-xl font-bold shadow-lg shadow-[#d4af37]/20 flex items-center gap-2 hover:brightness-110"
         >
           <Plus size={20} /> {type === 'gov' ? t.addRegion : t.addType}
@@ -646,7 +651,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
            <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
               <tr>
-                <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">{t.key} (ID)</th>
                 <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">{t.nameEn}</th>
                 <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">{t.nameAr}</th>
                 <th className="p-4 text-center text-xs font-bold text-slate-400 uppercase tracking-wider">{t.usedByLandmarks}</th>
@@ -656,8 +660,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             <tbody className="divide-y divide-slate-100">
               {list.map(item => (
                 <tr key={item.id} className="hover:bg-slate-50">
-                  <td className="p-4 font-mono text-sm text-slate-500">{item.id}</td>
-                  <td className="p-4 font-bold text-slate-800">{item.name.en}</td>
+                  <td className="p-4 font-bold text-slate-800">{item.emoji ? `${item.emoji} ` : ''}{item.name.en}</td>
                   <td className="p-4 font-bold text-slate-800 font-arabic text-right">{item.name.ar}</td>
                   <td className="p-4 text-center">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
@@ -713,11 +716,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#d4af37] font-arabic"
                   />
                 </div>
+                {type === 'type' && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-600">Emoji (Optional)</label>
+                    <input 
+                      type="text" 
+                      value={editingCategory.emoji || ''} 
+                      onChange={e => setEditingCategory({...editingCategory, emoji: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#d4af37]"
+                      placeholder="e.g. 🏛️"
+                    />
+                  </div>
+                )}
               </div>
               <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
                 <button onClick={() => setEditingCategory(null)} className="px-4 py-2 text-slate-500 font-bold hover:bg-slate-200 rounded-lg">{t.cancel}</button>
                 <button 
-                  onClick={() => handleSaveCategory(list, updateList, editingCategory, !editingCategory.id)} 
+                  onClick={() => handleSaveCategory(list, updateList, editingCategory, !editingCategory.id, type)} 
                   className="px-6 py-2 bg-[#d4af37] text-white font-bold rounded-lg hover:brightness-110"
                 >
                   {t.saveChanges}

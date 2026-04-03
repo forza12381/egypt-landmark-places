@@ -67,7 +67,7 @@ async function seedSupabase() {
   
   // Verify connection
   console.log('🔌 Testing Supabase connection...');
-  const { error: testError } = await supabase.from('categories').select('id').limit(1);
+  const { error: testError } = await supabase.from('governorates').select('id').limit(1);
   if (testError && testError.code !== 'PGRST116') { // PGRST116 is "relation does not exist"
     console.warn('⚠️  Warning: Could not verify Supabase connection:', testError.message);
     console.warn('   Make sure your tables are created in Supabase before seeding.');
@@ -79,15 +79,14 @@ async function seedSupabase() {
     // 1. Seed Categories (Governorates)
     console.log('📦 Seeding Governorates...');
     const governoratePayload = INITIAL_GOVERNORATES.map((c) => ({
-      id: c.id,
       name_en: c.name.en,
       name_ar: c.name.ar,
-      kind: 'governorate',
     }));
     
-    const { error: govError } = await supabase
-      .from('categories')
-      .upsert(governoratePayload, { onConflict: 'id' });
+    const { data: govData, error: govError } = await supabase
+      .from('governorates')
+      .insert(governoratePayload)
+      .select();
     
     if (govError) {
       throw new Error(`Failed to seed governorates: ${govError.message}`);
@@ -97,15 +96,15 @@ async function seedSupabase() {
     // 2. Seed Categories (Types)
     console.log('📦 Seeding Landmark Types...');
     const typePayload = INITIAL_TYPES.map((c) => ({
-      id: c.id,
       name_en: c.name.en,
       name_ar: c.name.ar,
-      kind: 'type',
+      emoji: c.emoji,
     }));
     
-    const { error: typeError } = await supabase
-      .from('categories')
-      .upsert(typePayload, { onConflict: 'id' });
+    const { data: typeData, error: typeError } = await supabase
+      .from('types')
+      .insert(typePayload)
+      .select();
     
     if (typeError) {
       throw new Error(`Failed to seed types: ${typeError.message}`);
@@ -114,12 +113,16 @@ async function seedSupabase() {
 
     // 3. Seed Landmarks (depends on categories)
     console.log('📦 Seeding Landmarks...');
+    
+    // Helper to find UUIDs from the fetched data
+    const getGovId = (name: string) => govData?.find(g => g.name_en === name)?.id;
+    const getTypeId = (name: string) => typeData?.find(t => t.name_en === name)?.id;
+
     const landmarkPayload = INITIAL_LANDMARKS.map((l) => ({
-      id: l.id,
       name_en: l.name.en,
       name_ar: l.name.ar,
-      type_id: l.type,
-      governorate_id: l.governorate,
+      type_id: getTypeId(l.type as string),
+      governorate_id: getGovId(l.governorate as string),
       lat: l.coords[0],
       lng: l.coords[1],
       description_en: l.description.en,
@@ -129,7 +132,7 @@ async function seedSupabase() {
     
     const { error: landmarkError } = await supabase
       .from('landmarks')
-      .upsert(landmarkPayload, { onConflict: 'id' });
+      .insert(landmarkPayload);
     
     if (landmarkError) {
       throw new Error(`Failed to seed landmarks: ${landmarkError.message}`);
@@ -165,8 +168,8 @@ async function seedSupabase() {
     console.log('\n🔍 Verifying data...');
     const [landmarksResult, governoratesResult, typesResult, translationsResult] = await Promise.all([
       supabase.from('landmarks').select('id'),
-      supabase.from('categories').select('id').eq('kind', 'governorate'),
-      supabase.from('categories').select('id').eq('kind', 'type'),
+      supabase.from('governorates').select('id'),
+      supabase.from('types').select('id'),
       supabase.from('translations').select('key'),
     ]);
 

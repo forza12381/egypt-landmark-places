@@ -115,7 +115,10 @@ const LandmarkSidePanel: React.FC<LandmarkSidePanelProps> = ({ landmark, onClose
             <div className="flex flex-wrap gap-2">
               <span className="px-3 py-1 bg-[#d4af37]/10 text-[#8b6d1b] rounded-full text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-1.5 border border-[#d4af37]/20">
                 <Tag size={12} />
-                {currentType ? currentType.name[language] : landmark.type}
+                {
+                currentType ? (
+                  // currentType.emoji ? `${currentType.emoji} ${currentType.name[language]}` :
+                   currentType.name[language]) : landmark.type}
               </span>
               <span className="px-3 py-1 bg-[#e2725b]/10 text-[#a6422d] rounded-full text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-1.5 border border-[#e2725b]/20">
                 <MapPin size={12} />

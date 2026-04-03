@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, useMap, Tooltip, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw,Tag } from 'lucide-react';
 import { Landmark, Category } from '../types';
 import { useLanguage } from './LanguageContext';
 
@@ -14,12 +14,7 @@ interface MapProps {
 }
 
 // Custom Marker Icons
-const createCustomIcon = (type: string) => {
-  const emoji = type === 'pyramid' ? '🏛️' :
-                type === 'religious' ? '⛪' :
-                type === 'natural' ? '🌿' :
-                type === 'museum' ? '🏺' : '📍';
-  
+const createCustomIcon = (emoji: string) => {
   return L.divIcon({
     className: 'custom-div-icon',
     html: `<div class="w-10 h-10 bg-white border-2 border-[#d4af37] rounded-full flex items-center justify-center text-xl shadow-lg transform transition-transform hover:scale-110 active:scale-95 cursor-pointer">${emoji}</div>`,
@@ -76,7 +71,7 @@ const ResetViewControl = () => {
   const handleReset = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    map.flyTo([29.2, 31.0], 9, { duration: 1.5 });
+    map.flyTo([26.82, 30.80], 7, { duration: 1.5 });
   };
 
   return (
@@ -102,8 +97,8 @@ const EgyptMap: React.FC<MapProps> = ({ landmarks, onLandmarkSelect, selectedLan
     // manually handles RTL text direction.
     <div className="w-full h-full relative z-0" dir="ltr">
       <MapContainer
-        center={[29.2, 31.0]}
-        zoom={9}
+        center={[26.82, 30.80]}
+        zoom={6.5}
         className="w-full h-full outline-none"
         zoomControl={false}
       >
@@ -117,13 +112,20 @@ const EgyptMap: React.FC<MapProps> = ({ landmarks, onLandmarkSelect, selectedLan
         <ZoomControl position={isRTL ? "bottomleft" : "bottomright"} />
         <ResetViewControl />
 
-        {landmarks.map((landmark) => (
+        {landmarks.map((landmark) => {
+          const currentType = types.find(t => t.id === landmark.type);
+          const typeEmoji = currentType?.emoji || '📍';
+          return (
           <Marker
             key={landmark.id}
             position={landmark.coords}
-            icon={createCustomIcon(landmark.type)}
+            icon={createCustomIcon(typeEmoji)}
             eventHandlers={{
               click: () => onLandmarkSelect(landmark),
+              contextmenu: (e) => {
+                e.originalEvent?.preventDefault();
+                e.target.toggleTooltip();
+              }
             }}
           >
             <Tooltip 
@@ -143,10 +145,12 @@ const EgyptMap: React.FC<MapProps> = ({ landmarks, onLandmarkSelect, selectedLan
                   {/* Content area */}
                   <div className={`p-4 flex flex-col items-center text-center ${isRTL ? 'font-arabic' : ''}`}>
                     <span className="text-[10px] uppercase font-black text-[#d4af37] tracking-[0.25em] mb-1.5 opacity-90">
-                      {types.find(t => t.id === landmark.type)?.name[language] || landmark.type}
+                      {currentType ? (
+                        // currentType.emoji ? `${currentType.emoji} ${currentType.name[language]}` :
+                         currentType.name[language]) : landmark.type}
                     </span>
                     
-                    <h3 className={`text-lg font-bold text-[#5c4033] leading-tight mb-1 ${isRTL ? 'text-xl' : 'font-ancient'}`}>
+                    <h3 className={`text-lg font-bold text-[#5c4033] leading-tight mb-1 whitespace-normal break-words w-full px-2 ${isRTL ? 'text-xl' : 'font-ancient'}`}>
                       {landmark.name[language]}
                     </h3>
                     
@@ -172,7 +176,8 @@ const EgyptMap: React.FC<MapProps> = ({ landmarks, onLandmarkSelect, selectedLan
               </div>
             </Tooltip>
           </Marker>
-        ))}
+          );
+        })}
         <MapController target={selectedLandmark ? selectedLandmark.coords : null} />
       </MapContainer>
     </div>

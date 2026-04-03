@@ -116,7 +116,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
                   {availableTypes.map((type) => (
                     <FilterChip
                       key={type.id}
-                      label={type.name[language]}
+                      label={type.emoji ? `${type.emoji} ${type.name[language]}` : type.name[language]}
                       active={currentType === type.id}
                       onClick={() => onFilterType(type.id)}
                     />

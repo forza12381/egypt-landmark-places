@@ -2,25 +2,24 @@
 import { Landmark, TranslationMap, Category } from './types';
 
 export const INITIAL_GOVERNORATES: Category[] = [
-  { id: 'beni-suef', name: { en: 'Beni Suef', ar: 'بني سويف' } },
-  { id: 'fayoum', name: { en: 'Fayoum', ar: 'الفيوم' } }
+  { name: { en: 'Beni Suef', ar: 'بني سويف' } },
+  { name: { en: 'Fayoum', ar: 'الفيوم' } }
 ];
 
 export const INITIAL_TYPES: Category[] = [
-  { id: 'temple', name: { en: 'Temple', ar: 'معبد' } },
-  { id: 'pyramid', name: { en: 'Pyramid', ar: 'هرم' } },
-  { id: 'religious', name: { en: 'Religious Site', ar: 'موقع ديني' } },
-  { id: 'museum', name: { en: 'Museum', ar: 'متحف' } },
-  { id: 'natural', name: { en: 'Natural Landmark', ar: 'معلم طبيعي' } },
-  { id: 'archaeological', name: { en: 'Archaeological Site', ar: 'موقع أثري' } }
+  { name: { en: 'Temple', ar: 'معبد' }, emoji: '🏛️' },
+  { name: { en: 'Pyramid', ar: 'هرم' }, emoji: '🔺' },
+  { name: { en: 'Religious Site', ar: 'موقع ديني' }, emoji: '🕌' },
+  { name: { en: 'Museum', ar: 'متحف' }, emoji: '🏺' },
+  { name: { en: 'Natural Landmark', ar: 'معلم طبيعي' }, emoji: '🌊' },
+  { name: { en: 'Archaeological Site', ar: 'موقع أثري' }, emoji: '⛏️' }
 ];
 
 export const INITIAL_LANDMARKS: Landmark[] = [
   {
-    id: 'meidum-pyramid',
     name: { en: 'Meidum Pyramid', ar: 'هرم ميدوم' },
-    type: 'pyramid',
-    governorate: 'beni-suef',
+    type: 'Pyramid',
+    governorate: 'Beni Suef',
     coords: [29.3886, 31.1578],
     images: [
       'https://images.unsplash.com/photo-1503177119275-0aa32b3a9368?auto=format&fit=crop&q=80&w=1000',
@@ -32,10 +31,9 @@ export const INITIAL_LANDMARKS: Landmark[] = [
     }
   },
   {
-    id: 'deir-el-adhra',
     name: { en: 'Monastery of the Virgin Mary', ar: 'دير العذراء مريم' },
-    type: 'religious',
-    governorate: 'beni-suef',
+    type: 'Religious Site',
+    governorate: 'Beni Suef',
     coords: [29.0661, 31.0994],
     images: [
       'https://images.unsplash.com/photo-1548013146-72479768bbaa?auto=format&fit=crop&q=80&w=1000',
@@ -47,10 +45,9 @@ export const INITIAL_LANDMARKS: Landmark[] = [
     }
   },
   {
-    id: 'qarun-lake',
     name: { en: 'Qarun Lake', ar: 'بحيرة قارون' },
-    type: 'natural',
-    governorate: 'fayoum',
+    type: 'Natural Landmark',
+    governorate: 'Fayoum',
     coords: [29.475, 30.638],
     images: [
       'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&q=80&w=1000',
