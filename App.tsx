@@ -92,7 +92,7 @@ const MainLayout: React.FC<{
   };
 
   return (
-    <div className="min-h-screen w-screen relative flex flex-col bg-[#fdf6e3]">
+    <div className="h-screen w-screen relative overflow-hidden flex flex-col bg-[#fdf6e3]">
       {/* Public Header */}
       {view === 'explorer' && (
         <header className="fixed top-0 inset-x-0 z-[60] px-4 py-3 sm:px-6 flex items-center justify-between bg-[#fdf6e3]/90 backdrop-blur-md border-b border-[#d4af37]/20 shadow-sm gap-3">
@@ -162,7 +162,7 @@ const MainLayout: React.FC<{
       )}
 
       {/* Content Area */}
-      <main className={`flex-1 relative ${view === 'explorer' ? 'mt-16' : ''} ${view === 'admin' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+      <main className={`flex-1 relative ${view === 'explorer' ? 'mt-16' : ''} overflow-hidden`}>
         {view === 'explorer' ? (
           <div className="flex h-full w-full relative">
             <div className="absolute inset-0 z-0">
