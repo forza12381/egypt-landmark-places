@@ -78,68 +78,183 @@ class DatabaseService {
   async saveLandmarks(landmarks: Landmark[]): Promise<void> {
     if (!this.isRemoteEnabled()) return;
 
-    // Get existing IDs from database
-    const { data: existingData } = await supabase!
-      .from('landmarks')
-      .select('id');
-
-    const existingIds = new Set((existingData || []).map((r: any) => r.id));
-    const newIds = new Set(landmarks.map((l) => l.id));
-
-    // Find IDs to delete (exist in DB but not in new array)
-    const idsToDelete = Array.from(existingIds).filter((id) => !newIds.has(id));
-
-    // Delete removed landmarks
-    if (idsToDelete.length > 0) {
-      const { error: deleteError } = await supabase!
+    try {
+      // 1. Get existing data to identify orphaned images
+      const { data: existingData, error: fetchError } = await supabase!
         .from('landmarks')
-        .delete()
-        .in('id', idsToDelete);
-
-      if (deleteError) {
+        .select('id, images');
+      
+      if (fetchError) {
         // eslint-disable-next-line no-console
-        console.error('[Supabase] deleteLandmarks error:', deleteError);
+        console.error('[Supabase] saveLandmarks fetch error:', fetchError);
+        // If we can't fetch old state, we can't safely identify orphans
+        // but we can still proceed with saving the new state.
       }
-    }
 
-    // Upsert remaining landmarks
-    const payload = landmarks.map((l) => ({
-      id: l.id,
-      name_en: l.name.en,
-      name_ar: l.name.ar,
-      type_id: l.type,
-      governorate_id: l.governorate,
-      lat: l.coords[0],
-      lng: l.coords[1],
-      description_en: l.description.en,
-      description_ar: l.description.ar,
-      images: l.images,
-    }));
+      const existingLandmarks = existingData || [];
+      
+      // Identify orphaned images: URLs present in DB but not in the new provided list
+      const dbImages = new Set<string>();
+      existingLandmarks.forEach((l: any) => {
+        if (Array.isArray(l.images)) {
+          l.images.forEach(img => {
+            if (img && typeof img === 'string') dbImages.add(img);
+          });
+        }
+      });
 
-    const { error } = await supabase!
-      .from('landmarks')
-      .upsert(payload, { onConflict: 'id' });
+      const newImages = new Set<string>();
+      landmarks.forEach(l => {
+        if (Array.isArray(l.images)) {
+          l.images.forEach(img => {
+            if (img && typeof img === 'string') newImages.add(img);
+          });
+        }
+      });
 
-    if (error) {
+      // Orphaned means it was in the DB but is no longer in the provided list
+      const orphanedImages = Array.from(dbImages).filter(img => !newImages.has(img));
+
+      // 2. Database Sync (Delete removed landmarks records)
+      const existingIdsInDb = new Set(existingLandmarks.map((r: any) => r.id));
+      const newIds = new Set(landmarks.map((l) => l.id));
+      const idsToDelete = Array.from(existingIdsInDb).filter((id) => !newIds.has(id));
+
+      if (idsToDelete.length > 0) {
+        const { error: deleteError } = await supabase!
+          .from('landmarks')
+          .delete()
+          .in('id', idsToDelete);
+
+        if (deleteError) {
+          // eslint-disable-next-line no-console
+          console.error('[Supabase] deleteLandmarks error:', deleteError);
+        }
+      }
+
+      // 3. Upsert remaining landmarks
+      const payload = landmarks.map((l) => ({
+        id: l.id,
+        name_en: l.name.en,
+        name_ar: l.name.ar,
+        type_id: l.type,
+        governorate_id: l.governorate,
+        lat: l.coords[0],
+        lng: l.coords[1],
+        description_en: l.description.en,
+        description_ar: l.description.ar,
+        images: l.images,
+      }));
+
+      const { error: upsertError } = await supabase!
+        .from('landmarks')
+        .upsert(payload, { onConflict: 'id' });
+
+      if (upsertError) {
+        // eslint-disable-next-line no-console
+        console.error('[Supabase] saveLandmarks update error:', upsertError);
+      } else {
+        // 4. Cleanup orphaned images from storage (only if DB sync succeeded)
+        if (orphanedImages.length > 0) {
+          await this.deleteStorageFiles(orphanedImages);
+        }
+      }
+    } catch (err) {
       // eslint-disable-next-line no-console
-      console.error('[Supabase] saveLandmarks error:', error);
+      console.error('[Supabase] saveLandmarks critical error:', err);
     }
   }
 
   async deleteLandmark(id: string): Promise<void> {
     if (!this.isRemoteEnabled()) return;
 
-    const { error } = await supabase!
-      .from('landmarks')
-      .delete()
-      .eq('id', id);
+    try {
+      // Fetch landmark first to get its images before deleting the record
+      const { data: landmark, error: fetchError } = await supabase!
+        .from('landmarks')
+        .select('images')
+        .eq('id', id)
+        .maybeSingle();
 
-    if (error) {
+      if (fetchError) {
+        // eslint-disable-next-line no-console
+        console.error('[Supabase] deleteLandmark fetch error:', fetchError);
+      }
+
+      const { error: deleteError } = await supabase!
+        .from('landmarks')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) {
+        // eslint-disable-next-line no-console
+        console.error('[Supabase] deleteLandmark error:', deleteError);
+        throw deleteError;
+      }
+
+      // Clean up images from storage if record deletion succeeded
+      if (landmark?.images && Array.isArray(landmark.images) && landmark.images.length > 0) {
+        await this.deleteStorageFiles(landmark.images);
+      }
+    } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('[Supabase] deleteLandmark error:', error);
+      console.error('[Supabase] deleteLandmark operation failed:', error);
       throw error;
     }
   }
+
+  async deleteStorageFiles(urls: string[]): Promise<void> {
+    if (!this.isRemoteEnabled() || !urls || urls.length === 0) return;
+
+    // Filter for Supabase storage URLs and extract relative paths
+    const bucketName = 'landmark-images';
+    const paths = urls
+      .map(url => {
+        try {
+          if (!url || typeof url !== 'string' || !url.includes(`/${bucketName}/`)) return null;
+
+          // Attempt to parse as URL
+          const urlObj = new URL(url);
+          const pathname = urlObj.pathname;
+          
+          // The path inside bucket is everything after the bucket name in the pathname
+          const marker = `/${bucketName}/`;
+          const index = pathname.indexOf(marker);
+          if (index !== -1) {
+            let path = pathname.substring(index + marker.length);
+            // Decode URI component to get the original filename/path (e.g. handle spaces)
+            return decodeURIComponent(path);
+          }
+        } catch (e) {
+          // Fallback parsing for non-standard or relative URLs
+          const parts = url.split(`/${bucketName}/`);
+          if (parts.length > 1) {
+            return decodeURIComponent(parts[1].split('?')[0]);
+          }
+        }
+        return null;
+      })
+      .filter((p): p is string => !!p);
+
+    if (paths.length === 0) return;
+
+    // Use a unique set of paths to avoid redundant requests
+    const uniquePaths = Array.from(new Set(paths));
+
+    const { error: storageError } = await supabase!.storage
+      .from(bucketName)
+      .remove(uniquePaths);
+
+    if (storageError) {
+      // eslint-disable-next-line no-console
+      console.error(`[Supabase] storage cleanup error for bucket "${bucketName}":`, storageError);
+    } else {
+      // eslint-disable-next-line no-console
+      console.log(`[Supabase] Successfully cleaned up ${uniquePaths.length} orphaned image(s) from storage.`);
+    }
+  }
+
+
 
   // --- Categories Operations ---
 
@@ -397,6 +512,38 @@ class DatabaseService {
       console.error('[Supabase] deleteTranslation error:', error);
       throw error;
     }
+  }
+
+  // --- Storage Operations ---
+
+  async uploadLandmarkImage(file: File): Promise<string> {
+    if (!this.isRemoteEnabled()) {
+      throw new Error('Supabase is not enabled');
+    }
+
+    // Create a unique file name
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${crypto.randomUUID()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase!.storage
+      .from('landmark-images')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (uploadError) {
+      // eslint-disable-next-line no-console
+      console.error('[Supabase] uploadLandmarkImage error:', uploadError);
+      throw uploadError;
+    }
+
+    const { data } = supabase!.storage
+      .from('landmark-images')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
   }
 }
 

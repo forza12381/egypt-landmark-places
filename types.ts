@@ -105,6 +105,7 @@ export interface Translations {
   key: string;
   english: string;
   arabic: string;
+  uploadImage: string;
 }
 
 export type TranslationMap = Record<Language, Translations>;

@@ -1,15 +1,17 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Landmark, TranslationMap, Category, Translations, Language } from '../types';
 import { 
   Plus, Edit2, Trash2, Save, X, Image as ImageIcon, MapPin, 
   Search, Copy, Tags, Map as MapIcon, Globe, 
   LogOut, BarChart3, Database, Languages as LangIcon, Settings,
-  Check, AlertTriangle, ChevronRight, LayoutDashboard, ArrowLeft, Menu, Info
+  Check, AlertTriangle, ChevronRight, LayoutDashboard, ArrowLeft, Menu, Info,
+  Upload, Loader2
 } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import { motion, AnimatePresence } from 'framer-motion';
+import { db } from '../services/database';
 
 // --- Types & Interfaces ---
 
@@ -162,8 +164,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   // Landmark Editor State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [sessionUploadedImages, setSessionUploadedImages] = useState<string[]>([]);
+  const isSavingRef = useRef(false);
+  const sessionImagesRef = useRef<string[]>([]);
   const [landmarkForm, setLandmarkForm] = useState<Partial<Landmark>>({});
   const [landmarkSearch, setLandmarkSearch] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   // Generic Category Editor State
   const [editingCategory, setEditingCategory] = useState<{id: string, name: {en: string, ar: string}, emoji?: string} | null>(null);
@@ -172,6 +178,47 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
     setSidebarOpen(false);
+  };
+
+  // Cleanup effect for session uploads when unmounting AdminPanel
+  useEffect(() => {
+    return () => {
+      // If we are unmounting and haven't saved, clean up new uploads
+      if (!isSavingRef.current && sessionImagesRef.current.length > 0) {
+        db.deleteStorageFiles(sessionImagesRef.current).catch(() => {});
+      }
+    };
+  }, []); // Run only on mount/unmount of AdminPanel
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      const url = await db.uploadLandmarkImage(file);
+      
+      // Track newly uploaded image URLs to session for potential cleanup on cancel
+      const updatedSessionImages = [...sessionImagesRef.current, url];
+      sessionImagesRef.current = updatedSessionImages;
+      setSessionUploadedImages(updatedSessionImages);
+
+      // Filter out any empty placeholder URLs before adding the new one
+      const currentImages = (landmarkForm.images || []).filter(img => img.trim().length > 0);
+      
+      setLandmarkForm(prev => ({
+        ...prev,
+        images: [...currentImages, url]
+      }));
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error('Upload Error:', error);
+      alert(`Upload failed: ${error.message || 'Make sure the "landmark-images" bucket exists in Supabase and is public.'}`);
+    } finally {
+      setIsUploading(false);
+      // Clear input
+      e.target.value = '';
+    }
   };
 
   // --- Actions ---
@@ -192,7 +239,40 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         images: ['']
       });
     }
+    isSavingRef.current = false;
+    sessionImagesRef.current = [];
+    setSessionUploadedImages([]); // Clear session tracker for new edit
     setIsEditorOpen(true);
+  };
+
+  const cancelEditor = async () => {
+    // If there were newly uploaded images in this session, delete them from storage
+    if (sessionImagesRef.current.length > 0) {
+      await db.deleteStorageFiles(sessionImagesRef.current);
+    }
+    sessionImagesRef.current = [];
+    setSessionUploadedImages([]);
+    setIsEditorOpen(false);
+  };
+
+  const removeImage = async (idx: number, url: string) => {
+    // 1. Remove from local form state
+    setLandmarkForm(prev => ({
+      ...prev,
+      images: (prev.images || []).filter((_, i) => i !== idx)
+    }));
+
+    // 2. If it was uploaded in THIS session, delete it from storage immediately
+    // since it will never be linked to a record now.
+    if (sessionImagesRef.current.includes(url)) {
+      db.deleteStorageFiles([url]).catch(() => {});
+      
+      // Update session tracker so we don't try to delete it again later
+      const nextSessionImages = sessionImagesRef.current.filter(img => img !== url);
+      sessionImagesRef.current = nextSessionImages;
+      setSessionUploadedImages(nextSessionImages);
+    }
+    // If it was an old image already in DB, the backend saveLandmarks sync will handle it upon Save.
   };
 
   const saveLandmark = () => {
@@ -214,11 +294,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       governorate: landmarkForm.governorate || governorates[0]?.id,
     } as Landmark;
 
+    // Successful save: Don't delete session uploads
+    isSavingRef.current = true;
+    
     if (editingId) {
       onUpdateLandmarks(landmarks.map(l => l.id === editingId ? { ...finalData, id: editingId } : l));
     } else {
       onUpdateLandmarks([{ ...finalData, id: crypto.randomUUID() }, ...landmarks]);
     }
+    sessionImagesRef.current = [];
+    setSessionUploadedImages([]); // Reset on success to keep them in storage
     setIsEditorOpen(false);
   };
 
@@ -420,7 +505,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           {/* Editor Header */}
           <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-50 gap-4">
             <div className="flex items-center gap-4">
-              <button onClick={() => setIsEditorOpen(false)} className="p-2 hover:bg-white rounded-full transition-colors text-slate-500">
+              <button onClick={cancelEditor} className="p-2 hover:bg-white rounded-full transition-colors text-slate-500">
                 <ArrowLeft size={20} />
               </button>
               <h3 className="font-bold text-xl text-slate-800">
@@ -428,7 +513,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               </h3>
             </div>
             <div className="flex gap-3 w-full sm:w-auto justify-end">
-              <button onClick={() => setIsEditorOpen(false)} className="px-4 py-2 text-slate-500 font-bold hover:bg-slate-200 rounded-lg transition-colors">
+              <button onClick={cancelEditor} className="px-4 py-2 text-slate-500 font-bold hover:bg-slate-200 rounded-lg transition-colors">
                 {t.cancel}
               </button>
               <button onClick={saveLandmark} className="px-6 py-2 bg-[#d4af37] text-white font-bold rounded-lg shadow-md flex items-center gap-2 hover:brightness-110 active:scale-95 transition-all">
@@ -566,12 +651,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               <section className="space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                    <h4 className="text-sm font-bold uppercase tracking-widest text-slate-400">{t.mediaGallery}</h4>
-                   <button 
-                     onClick={() => setLandmarkForm({...landmarkForm, images: [...(landmarkForm.images || []), '']})}
-                     className="text-xs font-bold bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2"
-                   >
-                     <Plus size={14} /> {t.addImage}
-                   </button>
+                   <div className="flex gap-2">
+                     <label className={`text-xs font-bold ${isUploading ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : 'bg-[#d4af37]/10 text-[#d4af37] hover:bg-[#d4af37]/20 cursor-pointer'} px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2`}>
+                       {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} 
+                       {t.uploadImage || 'Upload'}
+                       <input 
+                         type="file" 
+                         className="hidden" 
+                         accept="image/*" 
+                         onChange={handleImageUpload}
+                         disabled={isUploading}
+                       />
+                     </label>
+                     <button 
+                       onClick={() => setLandmarkForm({...landmarkForm, images: [...(landmarkForm.images || []), '']})}
+                       className="text-xs font-bold bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2"
+                     >
+                       <Plus size={14} /> {t.addImage}
+                     </button>
+                   </div>
                 </div>
                 
                 <div className="space-y-3">
@@ -599,7 +697,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                           />
                         </div>
                         <button 
-                          onClick={() => setLandmarkForm({...landmarkForm, images: landmarkForm.images?.filter((_, i) => i !== idx)})}
+                          onClick={() => removeImage(idx, img)}
                           className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                           title="Remove image"
                         >
