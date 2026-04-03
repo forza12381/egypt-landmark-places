@@ -93,6 +93,127 @@ const ResetViewControl = () => {
   );
 };
 
+// Leaflet Marker wrapper so we can use hooks safely.
+// React hooks must not be called inside loops like `landmarks.map(...)`.
+const HoldableLandmarkMarker: React.FC<{
+  landmark: Landmark;
+  typeEmoji: string;
+  typeLabel: string;
+  onLandmarkSelect: (landmark: Landmark) => void;
+  governorates: Category[];
+  isRTL: boolean;
+  language: string;
+  createCustomIcon: (emoji: string) => any;
+}> = ({ landmark, typeEmoji, typeLabel, onLandmarkSelect, governorates, isRTL, language, createCustomIcon }) => {
+  const timerRef = useRef<number | null>(null);
+
+  const startHold = (e: any) => {
+    const marker = e?.target;
+    if (!marker) return;
+
+    // Desktop & Mobile: open after 400ms of holding
+    timerRef.current = window.setTimeout(() => {
+      marker.openTooltip();
+    }, 400);
+  };
+
+  const stopHold = (e: any) => {
+    // Clear timer if they release before 400ms
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    // Hide tooltip immediately on release
+    const marker = e?.target;
+    if (marker?.closeTooltip) marker.closeTooltip();
+  };
+
+  return (
+    <Marker
+      key={landmark.id}
+      position={landmark.coords}
+      icon={createCustomIcon(typeEmoji)}
+      eventHandlers={{
+        click: (e: any) => {
+          onLandmarkSelect(landmark);
+          stopHold(e);
+        },
+        // Desktop support
+        mousedown: startHold,
+        mouseup: stopHold,
+        mouseout: stopHold, // Hide if mouse leaves marker while holding
+        // Mobile support (Direct DOM events often needed for touch)
+        add: (e: any) => {
+          const marker = e?.target;
+          const element = marker?.getElement?.();
+          if (element) {
+            element.addEventListener(
+              'touchstart',
+              () => startHold({ target: marker }),
+              { passive: true }
+            );
+            element.addEventListener(
+              'touchend',
+              () => stopHold({ target: marker }),
+              { passive: true }
+            );
+            element.addEventListener(
+              'touchcancel',
+              () => stopHold({ target: marker }),
+              { passive: true }
+            );
+          }
+        },
+      }}
+    >
+      <Tooltip
+        direction="top"
+        offset={[0, -28]} // Adjusted to float just above the circular marker (20px radius + padding)
+        opacity={1}
+        permanent={false}
+        className="custom-tooltip"
+        sticky={false}
+      >
+        <div className="relative">
+          {/* The card itself */}
+          <div className="custom-tooltip-card" style={{ direction: isRTL ? 'rtl' : 'ltr' }}>
+            {/* Content area */}
+            <div className={`p-4 flex flex-col items-center text-center ${isRTL ? 'font-arabic' : ''}`}>
+              <span className="text-[10px] uppercase font-black text-[#d4af37] tracking-[0.25em] mb-1.5 opacity-90">
+                {typeLabel}
+              </span>
+
+              <h3 className={`text-lg font-bold text-[#5c4033] leading-tight mb-1 whitespace-normal break-words w-full px-2 ${isRTL ? 'text-xl' : 'font-ancient'}`}>
+                {landmark.name[language]}
+              </h3>
+
+              <div className="flex items-center gap-1.5 text-gray-500 mb-3">
+                <span className="text-[11px] font-medium">
+                  {governorates.find((g) => g.id === landmark.governorate)?.name[language] ||
+                    landmark.governorate}
+                </span>
+              </div>
+
+              <div className="w-full h-32 rounded-xl overflow-hidden border border-[#d4af37]/20 shadow-inner bg-[#f1e4d0]">
+                <img
+                  src={landmark.images[0]}
+                  alt=""
+                  className="w-full h-full object-cover transform hover:scale-110 transition-transform duration-700"
+                  loading="lazy"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Custom arrow centered below the card */}
+          <div className="custom-tooltip-arrow" />
+        </div>
+      </Tooltip>
+    </Marker>
+  );
+};
+
 const EgyptMap: React.FC<MapProps> = ({ landmarks, onLandmarkSelect, selectedLandmark, governorates, types }) => {
   const { language, isRTL } = useLanguage();
 
@@ -120,96 +241,19 @@ const EgyptMap: React.FC<MapProps> = ({ landmarks, onLandmarkSelect, selectedLan
         {landmarks.map((landmark) => {
           const currentType = types.find(t => t.id === landmark.type);
           const typeEmoji = currentType?.emoji || '📍';
-            const timerRef = useRef(null);
-
-  const startHold = (e) => {
-    const marker = e.target;
-    // Desktop & Mobile: Open after 400ms of holding
-    timerRef.current = setTimeout(() => {
-      marker.openTooltip();
-    }, 400); 
-  };
-
-  const stopHold = (e) => {
-    // Clear timer if they release before 400ms
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-    }
-    // Hide tooltip immediately on release
-    e.target.closeTooltip();
-  };
+          const typeLabel = currentType ? currentType.name[language] : landmark.type;
           return (
-          <Marker
-            key={landmark.id}
-            position={landmark.coords}
-            icon={createCustomIcon(typeEmoji)}
-            eventHandlers={{
-              click: (e) =>{ onLandmarkSelect(landmark); stopHold(e)},
-               // Desktop support
-              mousedown: startHold,
-              mouseup: stopHold,
-              mouseout: stopHold, // Hide if mouse leaves marker while holding
-        
-        // Mobile support (Direct DOM events often needed for touch)
-        add: (e) => {
-          const marker = e.target;
-          const element = marker.getElement();
-          if (element) {
-            element.addEventListener('touchstart', () => startHold({ target: marker }), { passive: true });
-            element.addEventListener('touchend', () => stopHold({ target: marker }), { passive: true });
-            element.addEventListener('touchcancel', () => stopHold({ target: marker }), { passive: true });
-          }
-        }
-            }}
-          >
-            <Tooltip 
-              direction="top" 
-              offset={[0, -28]} // Adjusted to float just above the circular marker (20px radius + padding)
-              opacity={1} 
-              permanent={false}
-              className="custom-tooltip"
-              sticky={false}
-            >
-              <div className="relative">
-                {/* The card itself */}
-                <div 
-                  className="custom-tooltip-card"
-                  style={{ direction: isRTL ? 'rtl' : 'ltr' }}
-                >
-                  {/* Content area */}
-                  <div className={`p-4 flex flex-col items-center text-center ${isRTL ? 'font-arabic' : ''}`}>
-                    <span className="text-[10px] uppercase font-black text-[#d4af37] tracking-[0.25em] mb-1.5 opacity-90">
-                      {currentType ? (
-                        // currentType.emoji ? `${currentType.emoji} ${currentType.name[language]}` :
-                         currentType.name[language]) : landmark.type}
-                    </span>
-                    
-                    <h3 className={`text-lg font-bold text-[#5c4033] leading-tight mb-1 whitespace-normal break-words w-full px-2 ${isRTL ? 'text-xl' : 'font-ancient'}`}>
-                      {landmark.name[language]}
-                    </h3>
-                    
-                    <div className="flex items-center gap-1.5 text-gray-500 mb-3">
-                      <span className="text-[11px] font-medium">
-                        {governorates.find(g => g.id === landmark.governorate)?.name[language] || landmark.governorate}
-                      </span>
-                    </div>
-
-                    <div className="w-full h-32 rounded-xl overflow-hidden border border-[#d4af37]/20 shadow-inner bg-[#f1e4d0]">
-                      <img 
-                        src={landmark.images[0]} 
-                        alt="" 
-                        className="w-full h-full object-cover transform hover:scale-110 transition-transform duration-700"
-                        loading="lazy"
-                      />
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Custom arrow centered below the card */}
-                <div className="custom-tooltip-arrow" />
-              </div>
-            </Tooltip>
-          </Marker>
+            <HoldableLandmarkMarker
+              key={landmark.id}
+              landmark={landmark}
+              typeEmoji={typeEmoji}
+              typeLabel={typeLabel}
+              onLandmarkSelect={onLandmarkSelect}
+              governorates={governorates}
+              isRTL={isRTL}
+              language={language}
+              createCustomIcon={createCustomIcon}
+            />
           );
         })}
         <MapController target={selectedLandmark ? selectedLandmark.coords : null} />
